@@ -1,0 +1,150 @@
+; .program <name>  プログラムの開始を宣言するディレクティブ
+; 列選択・点灯選択ピン操作
+.program hub75_row
+
+;----- 定数などの設定 -----
+; .define 定数名 値
+
+;----- サイドセット・ピンの設定 -----
+.side_set 2
+;----- アドレス・オフセットの設定 -----
+
+
+.wrap_target
+    pull block     side 0b10     ; OE:High LAT:Low    LED OFF
+    nop            side 0b11     ; OE:High LAT:High   行選択操作開始
+    out null, 5    side 0b11 [3] ; 行データをセット
+    nop            side 0b10 [3] ; OE:High LAT:Low    行選択操作終了、データを送り込む
+    out x, 27      side 0b00     ; OE:Low LAT:Low     LED ON
+pwm_loop:
+    jmp x-- pwm_loop  side 0b00  ; OE:Low  LAT:Low    LED ON  指定されたクロック数分点灯したままにしておく
+    nop               side 0b10  ; OE:High LAT:Low    LED OFF
+.wrap
+
+;----- C言語のヘッダに追加するコード -----
+% c-sdk {
+
+//初期化関数
+static inline void hub75_row_program_init(
+    PIO pio, //pio0 , pio1 どちらか選択
+    uint sm, //ステートマシン0,1,2,3 どれか選択
+    uint offset, //最初の命令のオフセット?
+    uint row_base_pin, //Aピンを選択
+    uint n_row_pins, //ピン数
+    uint latch_base_pin) //LATピン
+{
+
+    // ピンを出力に設定
+    //pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, 16, 1, true);
+    pio_gpio_init(pio, 16);
+    // ABCDピンごとにPIOに割り当て
+    //for(uint i = row_base_pin; i < row_base_pin + n_row_pins; i++){
+    //    pio_gpio_init(pio, i);
+    //}
+    pio_gpio_init(pio, latch_base_pin);
+    pio_gpio_init(pio, latch_base_pin + 1);
+
+    // ステート・マシンの設定
+    pio_sm_config c = hub75_row_program_get_default_config(offset);
+
+    //sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
+    sm_config_set_out_pins(&c, 16, 1);
+    sm_config_set_sideset_pins(&c, latch_base_pin);
+
+
+    //FIFOの動き方を設定する
+    sm_config_set_out_shift(&c, true, false, 32);
+            //shift right, no auto_pull, threshold
+
+    // ステート・マシンにコード・アドレスを設定し実行を許可
+    // コード・アドレス=offset?
+    // 書き込み
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+
+}
+
+static inline void hub75_wait_tx_stall(PIO pio, uint sm) {
+    uint32_t txstall_mask = 1u << (PIO_FDEBUG_TXSTALL_LSB + sm);
+    pio->fdebug = txstall_mask;
+    while (!(pio->fdebug & txstall_mask))
+        tight_loop_contents();
+}
+%}
+
+
+
+
+
+
+; .program <name>  プログラムの開始を宣言するディレクティブ
+.program hub75_data
+
+;----- 定数などの設定 -----
+; .define 定数名 値
+.define WIDTH_32  2
+.define LOOP 1
+
+;----- サイドセット・ピンの設定 -----
+.side_set 1
+
+public entry_point:
+.wrap_target
+public shift0:
+    pull             side 0b0 ; shift0: shamtだけビットシフトを行う
+    in osr, 3        side 0b1 ; R0B0G0 CLK ON
+    out null, 32     side 0b1
+public shift1:
+    pull             side 0b1 ; shift1: shamtだけビットシフトを行う
+    in osr, 3        side 0b1 ; R1B1G1
+    out null, 32     side 0b1
+    in null, 26      side 0b0 ; CLK OFF
+    mov pins, ::isr  side 0b0
+.wrap
+
+
+;----- ヘッダに追加するコード -----
+% c-sdk {
+static inline void hub75_data_program_init(
+    PIO pio,  //pio0 , pio1 どちらか選択
+    uint sm,  //ステートマシン0,1,2,3 どれか選択
+    uint offset,  //最初の命令のオフセット?
+    uint rgb_base_pin, //R0ピン選択
+    uint clock_pin) //CLKピン選択
+{
+    pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, clock_pin, 1, true);
+    for (uint i = rgb_base_pin; i < rgb_base_pin + 6; ++i)
+        pio_gpio_init(pio, i);
+    pio_gpio_init(pio, clock_pin);
+    // ステート・マシンの設定
+    pio_sm_config c = hub75_data_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, rgb_base_pin, 6);
+    sm_config_set_sideset_pins(&c, clock_pin);
+
+    // FIFOの動き方を設定する
+    sm_config_set_out_shift(&c, true, true, 30); // OUTシフトレジスタの有効化
+
+    sm_config_set_in_shift(&c, false, false, 32); // INシフトレジスタの有効化
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_exec(pio, sm, offset + hub75_data_offset_entry_point);
+    pio_sm_set_enabled(pio, sm, true);
+
+}
+
+// Patch a data program at `offset` to preshift pixels by `shamt`
+static inline void hub75_data_set_shift(PIO pio, uint sm, uint offset, uint shamt) {
+    uint16_t instr;
+    if (shamt == 0)
+        // instr : instruction 命令
+        instr = pio_encode_pull(false, true); // blocking PULL
+    else
+        instr = pio_encode_out(pio_null, shamt); // out null, shamt
+    // 命令を入れ込む
+    pio->instr_mem[offset + hub75_data_offset_shift0] = instr | pio_encode_sideset(1, 0b0); // side 0b0
+    pio->instr_mem[offset + hub75_data_offset_shift1] = instr | pio_encode_sideset(1, 0b1); // side 0b1
+}
+%}
