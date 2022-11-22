@@ -25,7 +25,7 @@
 #define DATA_BASE_PIN 0
 #define DATA_N_PINS 6
 #define ROWSEL_BASE_PIN 20
-#define ROWSEL_N_PINS 4
+#define ROWSEL_N_PINS 5
 #define CLK_PIN 6
 #define STROBE_PIN 14
 #define OEN_PIN 15
@@ -47,6 +47,7 @@ uint use_buffer_num = 0;
 uint32_t LUT_R[256] = {0};
 uint32_t LUT_G[256] = {0};
 uint32_t LUT_B[256] = {0};
+
 
 
 
@@ -147,11 +148,8 @@ void write_matrix(){
         if(use_buffer_num == 0){ // フレームバッファ0
         for (int i = 0; i < 1; ++i){
         for (int rowsel = 0; rowsel < 16; ++rowsel){
-            //C==1のときスキップ
-            if((rowsel & 0b00100) != 0)continue;
-
             gpio_put_masked(mask_abc | mask_de, 0);
-            gpio_put_masked(0b11 << 20, (rowsel & 0b00011) << 20);
+            gpio_put_masked(0b111 << 20, (rowsel & 0b00111) << 20);
             gpio_put_masked(0b11 << 26, (rowsel & 0b11000) >> 3 << 26);
 
             // 行バッファ準備
@@ -187,11 +185,8 @@ void write_matrix(){
         }else{ // フレームバッファ1
         for (int i = 0; i < 1; ++i){
         for (int rowsel = 0; rowsel < 16; ++rowsel){
-            //C==1のときスキップ
-            if((rowsel & 0b00100) != 0)continue;
-
             gpio_put_masked(mask_abc | mask_de, 0);
-            gpio_put_masked(0b11 << 20, (rowsel & 0b00011) << 20);
+            gpio_put_masked(0b111 << 20, (rowsel & 0b00111) << 20);
             gpio_put_masked(0b11 << 26, (rowsel & 0b11000) >> 3 << 26);
 
             // 行バッファ準備
