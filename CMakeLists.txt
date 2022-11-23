@@ -20,7 +20,7 @@ add_executable(pico_hub75)
 
 pico_generate_pio_header(pico_hub75 ${CMAKE_CURRENT_LIST_DIR}/hub75.pio)
 
-target_sources(pico_hub75 PRIVATE main.cpp)
+target_sources(pico_hub75 PRIVATE main.cpp hub75.cpp)
 
 target_compile_definitions(pico_hub75 PRIVATE
 	PICO_DEFAULT_UART_TX_PIN=28
