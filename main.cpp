@@ -27,7 +27,6 @@
 
 #define WIDTH 64
 #define HEIGHT 32
-#define HALF_HEIGHT 16
 
 
 
@@ -73,7 +72,7 @@ uint8_t alpha_blend(uint8_t bright_front, uint8_t bright_back, uint8_t opacity){
 
 
 
-uint fps = 0; //frame per second
+
 
 
 
@@ -116,9 +115,11 @@ void write_canvas_to_buffer(uint8_t (&image)[HEIGHT][WIDTH][3]){
     if(use_buffer_num == 0){
         write_to_buffer(frameBuffer_1, image);
         use_buffer_num = 1;
+        hub75_set_buffer_num(1);
     }else{
         write_to_buffer(frameBuffer_0, image);
         use_buffer_num = 0;
+        hub75_set_buffer_num(0);
     }
 }
 
@@ -193,7 +194,8 @@ void write_str_to_canvas(uint8_t (&canvas)[HEIGHT][WIDTH][3], const uint8_t* fon
 
 int main() {
     // LUT初期化
-    generate_lut(2.5);
+    hub75_init(WIDTH, HEIGHT, &frameBuffer_0[0][0][0], &frameBuffer_1[0][0][0]);
+    hub75_set_buffer_num(1);
 
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
